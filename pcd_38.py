@@ -68,19 +68,19 @@ PRACTICES = [
     "COMUC", "EGUC", "AUCLA", "GA037", "SACUC", "OK209", "IL203", "TX008", "IL204", "CA023", "SUPER", "TX124", "VA202", "CA025", "SD201", "SOMER", "OK203", "CO200", "NM202", "TCPFL", "BECAR", "NATO", "ABBY", "EAST", "ZNC08",
     "HI200", "QCARE", "TUCNM", "QUC", "WTRFT", "TX111", "ZMS01", "FOLSM", "WA201", "WY003", "AMSXP", "VIP", "LA204", "CKAQC", "LA205", "IL008", "KY201", "NC026", "MD204", "TX222", "PUCNA", "PHYUC", "NC205", "FL030", "FL020",
     "LFAC", "CA212", "GA205", "TX120", "OK204", "TX040", "STEEL", "WY007", "ZCA07", "WV200",
-    # "IN203", "TX119", "LA004", "SMOKE", "WFE", "HVNS", "IN204", "TX226", "SRC", "DAVIS", "LIFE", "BIGBR", "CA213", "FL222", "GFM", "IL009", "CO202", "NY201", "OK016", "PA022", "OH213", "AK201", "CA232",
-    # "CO204", "PA200", "PEACH", "TX212", "ACMA", "TN203", "PNUC", "IL210", "MS206", "CA228", "OK201", "IN206", "TX203", "MS019", "NE200", "SSM", "LONG", "OURUC",
-    # "MLUC", "LA006", "BAYOU", "IL205", "NM201", "TX239",
-    # "AZ202", "ZIL03", "FL213", "PA201", "OH009", "ZCA15", "GA206", "WA200", "TX229", "FL215", "OH025", "OH204", "TX240", "TX067", "TX244", "TX206", "MD203", "NE203", "AL024", "OH201", "CA221", "MS205",
-    # "CA208", "AL209", "CA230", "TX107", "MHLTH",
-    # "FL218", "CT007", "FL201", "PA202", "OH212", "TN205", "MS203", "GA207", "PILA", "CA235", "TN207", "MN203", "IL217", "IL221", "OH207", "LA209", "GA214", "PICNA", "TX254",
-    # "IN002", "TN011", "MO001", "OH206", "SC201", "CQCFP", "VA204", "LOWUC", "REDMD", "UCMC",
-    # "HCANC", "SUCC", "CRUC", "LA055", "PUCLA", "LA207", "EONE", "UCJ", "DNWIC", "NE005", "ICC", "AL204",
+    "IN203", "TX119", "LA004", "SMOKE", "WFE", "HVNS", "IN204", "TX226", "SRC", "DAVIS", "LIFE", "BIGBR", "CA213", "FL222", "GFM", "IL009", "CO202", "NY201", "OK016", "PA022", "OH213", "AK201", "CA232",
+    "CO204", "PA200", "PEACH", "TX212", "ACMA", "TN203", "PNUC", "IL210", "MS206", "CA228", "OK201", "IN206", "TX203", "MS019", "NE200", "SSM", "LONG", "OURUC",
+    "MLUC", "LA006", "BAYOU", "IL205", "NM201", "TX239",
+    "AZ202", "ZIL03", "FL213", "PA201", "OH009", "ZCA15", "GA206", "WA200", "TX229", "FL215", "OH025", "OH204", "TX240", "TX067", "TX244", "TX206", "MD203", "NE203", "AL024", "OH201", "CA221", "MS205",
+    "CA208", "AL209", "CA230", "TX107", "MHLTH",
+    "FL218", "CT007", "FL201", "PA202", "OH212", "TN205", "MS203", "GA207", "PILA", "CA235", "TN207", "MN203", "IL217", "IL221", "OH207", "LA209", "GA214", "PICNA", "TX254",
+    "IN002", "TN011", "MO001", "OH206", "SC201", "CQCFP", "VA204", "LOWUC", "REDMD", "UCMC",
+    "HCANC", "SUCC", "CRUC", "LA055", "PUCLA", "LA207", "EONE", "UCJ", "DNWIC", "NE005", "ICC", "AL204",
 ]
 
 # How many practices to process concurrently. Each practice gets its own fresh
 # login/browser session, and this many run side-by-side at once.
-CONCURRENCY = 5
+CONCURRENCY = 20
 
 # How many times to retry a practice that hasn't produced a downloaded file yet,
 # before giving up on it for this run. Set MAX_ATTEMPTS_PER_PRACTICE=0 in your
@@ -92,7 +92,7 @@ MAX_ATTEMPTS_PER_PRACTICE = int(os.environ.get("MAX_ATTEMPTS_PER_PRACTICE", 5))
 async def login(playwright: Playwright):
     """Launch a fresh browser, log in, and navigate to the Reports section.
     Returns (browser, context, page)."""
-    browser = await playwright.chromium.launch(headless=False)
+    browser = await playwright.chromium.launch(headless=True)
     context = await browser.new_context(accept_downloads=True)
     page = await context.new_page()
 
