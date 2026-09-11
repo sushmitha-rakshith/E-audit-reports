@@ -235,7 +235,7 @@ async def run_report_for_practice(page, practice: str) -> Path:
         state="visible",
         timeout=240000,
     )
-    await asyncio.sleep(160)  # give the report + export control time to fully render
+    await asyncio.sleep(180)  # give the report + export control time to fully render
 
     await report_page.click(
         "#ReportViewerControl_ctl05_ctl04_ctl00_ButtonImg",
@@ -244,7 +244,7 @@ async def run_report_for_practice(page, practice: str) -> Path:
 
     excel_xpath = "//a[contains(., 'Excel') or contains(., 'EXCEL')]"
 
-    async with report_page.expect_download(timeout=560000) as download_info:
+    async with report_page.expect_download(timeout=640000) as download_info:
         try:
             await report_page.click(f"xpath={excel_xpath}")
         except Exception:

@@ -2,7 +2,7 @@ import asyncio
 import io
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from dotenv import load_dotenv
 from playwright.async_api import Playwright, async_playwright
@@ -12,7 +12,7 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from email.mime.text import MIMEText
-from datetime import timedelta
+
 load_dotenv()  # Load environment variables from .env file if present
 
 # ============================
@@ -20,7 +20,7 @@ load_dotenv()  # Load environment variables from .env file if present
 # ============================
 LOG_DIR = Path("./logs")
 LOG_DIR.mkdir(exist_ok=True)
-LOG_FILE = LOG_DIR / f"cnt_27_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+LOG_FILE = LOG_DIR / f"pcd_38_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
 logging.basicConfig(
     level=logging.INFO,
@@ -30,7 +30,7 @@ logging.basicConfig(
         logging.StreamHandler(),
     ],
 )
-logger = logging.getLogger("cnt_27")
+logger = logging.getLogger("pcd_38")
 
 USERNAME = os.environ.get("USERNAME")
 PASSWORD = os.environ.get("PASSWORD")
@@ -58,7 +58,7 @@ RECIPIENT_EMAILS = [
 
 # Report date range (adjust as needed, or pull from env/args too)
 TO_DATE   = datetime.today().strftime("%m/%d/%Y")
-FROM_DATE = (datetime.today() - timedelta(days=8)).strftime("%m/%d/%Y")
+FROM_DATE = (datetime.today() - timedelta(days=7)).strftime("%m/%d/%Y")
 
 
 DOWNLOAD_DIR = Path("./downloads")
@@ -134,33 +134,31 @@ async def run_report_for_practice(page, practice: str) -> Path:
     report_frame, nav_frame = get_frames(page)  # re-grab frames in case they reloaded
 
     await nav_frame.locator("#userSearch").click()
-    await nav_frame.locator("#userSearch").fill("cnt_27")
+    await nav_frame.locator("#userSearch").fill("pcd_38")
     await nav_frame.locator("#userSearch").press("Enter")
-    await asyncio.sleep(3)  # let the search results load
+    await asyncio.sleep(5)  # let the search results load
 
     await report_frame.get_by_text(
-        "Log Book VisitsPractice, CNT"
+        "Procedure Codes By Payer In Charged StatusPractice, PCD 38 The report will show"
     ).click()
 
-    # --- Dismiss the info popup that appears ---
-    async with page.expect_popup(timeout=80000) as info_popup:
-        await report_frame.locator("#FSDHL").click()
-    info_page = await info_popup.value
-    await info_page.close()
+    # --- Info popup no longer appears for this report, so nothing to dismiss ---
 
     # --- Fill in report filters ---
-    await report_frame.locator("#FromServiceDate").click()
-    await report_frame.locator("#FromServiceDate").fill(FROM_DATE)
-    await report_frame.locator("#ToServiceDate").click()
-    await report_frame.locator("#ToServiceDate").fill(TO_DATE)
-    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("#freeunStatusListcheckall").click()
-    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("#freeStatusListcheck1").check()
-    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("#freeunArrivalStatuscheckall").click()
-    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("#freeArrivalStatuscheck1").check()
-
+    # await report_frame.locator("#FromServiceDate").click()
+    # await report_frame.locator("#FromServiceDate").fill(FROM_SERVICE_DATE)
+    # await report_frame.locator("#ToServiceDate").click()
+    # await report_frame.locator("#ToServiceDate").fill(TO_SERVICE_DATE)
+    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.get_by_text("Check AllUncheck All").nth(1).click()
+    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("#freeunClinicListcheckall").click()
+    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.get_by_text("*ALL*").first.click()
+    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("#freeClinicListcheck1").check()
+    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("#freeunClassListcheckall").click()
+    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("#freeClassListcheck1").check()
+    await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.locator("input[name=\"freeIncludeRebills\"]").check()
     # --- Run the report (opens in a new tab) ---
     async with page.expect_popup(timeout=90000) as report_popup:
-        await report_frame.get_by_role("button", name="Run Report").click()
+        await page.locator("iframe[name=\"reportMainWindow\"]").content_frame.locator("frame[name=\"PVRC_MainStage\"]").content_frame.get_by_role("button", name="Run Report").click()
     report_page = await report_popup.value
 
     # --- Export to Excel ---
@@ -170,7 +168,7 @@ async def run_report_for_practice(page, practice: str) -> Path:
         state="visible",
         timeout=240000,
     )
-    await asyncio.sleep(60)  # give the report + export control time to fully render
+    await asyncio.sleep(240)  # give the report + export control time to fully render
 
     await report_page.click(
         "#ReportViewerControl_ctl05_ctl04_ctl00_ButtonImg",
@@ -179,7 +177,7 @@ async def run_report_for_practice(page, practice: str) -> Path:
 
     excel_xpath = "//a[contains(., 'Excel') or contains(., 'EXCEL')]"
 
-    async with report_page.expect_download(timeout=360000) as download_info:
+    async with report_page.expect_download(timeout=680000) as download_info:
         try:
             await report_page.click(f"xpath={excel_xpath}")
         except Exception:
@@ -193,7 +191,7 @@ async def run_report_for_practice(page, practice: str) -> Path:
     download = await download_info.value
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    save_path = DOWNLOAD_DIR / f"cnt27_reports_{practice}_report_{timestamp}.xlsx"
+    save_path = DOWNLOAD_DIR / f"pcd_38_reports_{practice}_report_{timestamp}.xlsx"
     await download.save_as(save_path)
     logger.info(f"[{practice}] Report saved to: {save_path.resolve()}")
 
@@ -290,7 +288,7 @@ def combine_reports(file_paths: list[Path]) -> tuple[Path | None, pd.DataFrame |
     for path in file_paths:
         try:
             # Practice code is embedded in the filename:
-            # cnt27_reports_<PRACTICE>_report_<timestamp>.xlsx
+            # pcd_38_reports_<PRACTICE>_report_<timestamp>.xlsx
             practice = path.stem.split("_")[2]
             df = pd.read_excel(path)
             df.insert(0, "Practice", practice)
@@ -322,7 +320,7 @@ def send_email_with_tables(
     sender_email=None,
     sender_password=None,
     recipient_emails=None,
-    subject="CNT-27 Combined Report",
+    subject="PCD_38 Combined Report",
 ):
     # -----------------------------
     # Basic validation
@@ -497,13 +495,12 @@ def send_combined_report_email(
         sender_email=SENDER_EMAIL,
         sender_password=SENDER_PASSWORD,
         recipient_emails=RECIPIENT_EMAILS,
-        subject=f"CNT-27 Combined Report - {datetime.now().strftime('%Y-%m-%d')}",
+        subject=f"PCD_38 Combined Report - {datetime.now().strftime('%Y-%m-%d')}",
     )
 
 
 async def run(playwright: Playwright) -> None:
-    logger.info(f"Starting CNT-27 run. Log file: {LOG_FILE.resolve()}")
-    logger.info(f"Date range: {FROM_DATE} to {TO_DATE}")
+    logger.info(f"Starting PCD-38 run. Log file: {LOG_FILE.resolve()}")
     logger.info(f"Practices to process ({len(PRACTICES)}): {PRACTICES}")
 
     if not USERNAME or not PASSWORD or not URL:
