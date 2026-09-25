@@ -1,4 +1,6 @@
 import asyncio
+import logging
+import logging.handlers
 import os
 from datetime import datetime
 from pathlib import Path
@@ -37,6 +39,45 @@ DOWNLOAD_DIR = Path("./downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 CONCURRENCY = 25
 
+# --- Logging config ---
+LOG_DIR = Path(os.environ.get("LOG_DIR", "./logs"))
+LOG_DIR.mkdir(exist_ok=True)
+LOG_LEVEL = os.environ.get("LOG_LEVEL", "INFO").upper()
+# One log file per run (timestamped) plus a rotating "latest" file that
+# survives across runs, so you can tail a stable filename in production.
+_run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+RUN_LOG_FILE = LOG_DIR / f"pay_40_{_run_timestamp}.log"
+LATEST_LOG_FILE = LOG_DIR / "pay_40.log"
+
+logger = logging.getLogger("pay_40")
+logger.setLevel(LOG_LEVEL)
+logger.propagate = False
+
+_formatter = logging.Formatter(
+    fmt="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
+
+if not logger.handlers:
+    # Console handler - what you see when running interactively
+    _console_handler = logging.StreamHandler()
+    _console_handler.setFormatter(_formatter)
+    logger.addHandler(_console_handler)
+
+    # Per-run log file - one full record of this run
+    _run_file_handler = logging.FileHandler(RUN_LOG_FILE, encoding="utf-8")
+    _run_file_handler.setFormatter(_formatter)
+    logger.addHandler(_run_file_handler)
+
+    # Rotating "latest" log file - stable filename, keeps last 5 x 10MB
+    _rotating_handler = logging.handlers.RotatingFileHandler(
+        LATEST_LOG_FILE, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8"
+    )
+    _rotating_handler.setFormatter(_formatter)
+    logger.addHandler(_rotating_handler)
+
+logger.info("Logging initialized. Run log: %s", RUN_LOG_FILE.resolve())
+
 
 def clear_download_dir() -> None:
     """Delete any existing files in DOWNLOAD_DIR before starting a fresh run."""
@@ -45,7 +86,7 @@ def clear_download_dir() -> None:
         if f.is_file():
             f.unlink()
             count += 1
-    print(f"Cleared {count} old file(s) from {DOWNLOAD_DIR.resolve()}")
+    logger.info("Cleared %d old file(s) from %s", count, DOWNLOAD_DIR.resolve())
 
 
 PRACTICES =[
@@ -181,7 +222,7 @@ async def ensure_reports_ready(page, timeout: int = 60000) -> tuple:
         await report_frame.locator("#subpracticeselect").wait_for(state="visible", timeout=timeout)
     except Exception:
         # Frame didn't come up in time try clicking Reports again to force a reload
-        print("Reports frame not ready, re-clicking Reports link...")
+        logger.warning("Reports frame not ready, re-clicking Reports link...")
         await page.get_by_role("link", name="Reports").click()
         await asyncio.sleep(2)
         report_frame, nav_frame = get_frames(page)
@@ -248,7 +289,7 @@ async def run_report_for_practice(page, practice: str) -> Path:
         try:
             await report_page.click(f"xpath={excel_xpath}")
         except Exception:
-            print(f"[{practice}] Excel link click failed, falling back to JS click")
+            logger.warning("[%s] Excel link click failed, falling back to JS click", practice)
             await report_page.evaluate("""
                 [...document.querySelectorAll('a')].find(a =>
                     a.innerText.toLowerCase().includes('excel')
@@ -260,7 +301,7 @@ async def run_report_for_practice(page, practice: str) -> Path:
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     save_path = DOWNLOAD_DIR / f"pay_40_{practice}_report_{timestamp}.xlsx"
     await download.save_as(save_path)
-    print(f"[{practice}] Report saved to: {save_path.resolve()}")
+    logger.info("[%s] Report saved to: %s", practice, save_path.resolve())
 
     await report_page.close()
     return save_path
@@ -272,12 +313,12 @@ async def process_practice(playwright: Playwright, practice: str, semaphore: asy
     async with semaphore:
         browser = None
         try:
-            print(f"[{practice}] Logging in...")
+            logger.info("[%s] Logging in...", practice)
             browser, context, page = await login(playwright)
             save_path = await run_report_for_practice(page, practice)
             return practice, True, None, save_path
         except Exception as e:
-            print(f"[{practice}] FAILED: {e}")
+            logger.error("[%s] FAILED: %s", practice, e, exc_info=True)
             return practice, False, str(e), None
         finally:
             if browser:
@@ -309,7 +350,7 @@ async def process_practices_with_retry(
     round_num = 0
     while remaining:
         round_num += 1
-        print(f"\n=== Round {round_num}: {len(remaining)} practice(s) to run ===")
+        logger.info("=== Round %d: %d practice(s) to run ===", round_num, len(remaining))
         tasks = [
             asyncio.create_task(process_practice(playwright, practice, semaphore))
             for practice in remaining
@@ -325,16 +366,17 @@ async def process_practices_with_retry(
             else:
                 unlimited = MAX_ATTEMPTS_PER_PRACTICE <= 0
                 if unlimited or attempts[practice] < MAX_ATTEMPTS_PER_PRACTICE:
-                    print(
-                        f"[{practice}] not downloaded yet "
-                        f"(attempt {attempts[practice]}"
-                        f"{'' if unlimited else f'/{MAX_ATTEMPTS_PER_PRACTICE}'}), retrying..."
+                    logger.warning(
+                        "[%s] not downloaded yet (attempt %d%s), retrying...",
+                        practice,
+                        attempts[practice],
+                        "" if unlimited else f"/{MAX_ATTEMPTS_PER_PRACTICE}",
                     )
                     next_round.append(practice)
                 else:
-                    print(
-                        f"[{practice}] giving up after {attempts[practice]} "
-                        f"attempt(s): {err}"
+                    logger.error(
+                        "[%s] giving up after %d attempt(s): %s",
+                        practice, attempts[practice], err,
                     )
                     gave_up.append(practice)
         remaining = next_round
@@ -353,7 +395,7 @@ def load_and_clean_reports(practice_files: list[tuple[str, Path]]) -> pd.DataFra
     re-parsing it out of the filename) avoids fragile string-splitting.
     """
     if not practice_files:
-        print("\nNo successful downloads to process.")
+        logger.warning("No successful downloads to process.")
         return None
 
     frames = []
@@ -368,10 +410,10 @@ def load_and_clean_reports(practice_files: list[tuple[str, Path]]) -> pd.DataFra
             data.insert(0, "Practice", practice)
             frames.append(data)
         except Exception as e:
-            print(f"[{practice}] Could not read {path.name}: {e}")
+            logger.error("[%s] Could not read %s: %s", practice, path.name, e, exc_info=True)
 
     if not frames:
-        print("\nNo readable files to process.")
+        logger.warning("No readable files to process.")
         return None
 
     combined_data = pd.concat(frames, ignore_index=True)
@@ -392,7 +434,7 @@ def load_and_clean_reports(practice_files: list[tuple[str, Path]]) -> pd.DataFra
     # --- Select final columns for the DB table ---
     denial_final = combined_data[FINAL_COLUMNS]
 
-    print(f"\nProcessed {len(denial_final)} rows from {len(frames)} practice file(s)")
+    logger.info("Processed %d rows from %d practice file(s)", len(denial_final), len(frames))
     return denial_final
 
 
@@ -405,7 +447,7 @@ def upload_to_database(df: pd.DataFrame) -> None:
     instead of piling up on top of it via append.
     """
     if df is None or df.empty:
-        print("Nothing to upload.")
+        logger.warning("Nothing to upload.")
         return
 
     if not all([DB_USER, DB_PASSWORD, DB_SERVER, DB_NAME]):
@@ -421,10 +463,10 @@ def upload_to_database(df: pd.DataFrame) -> None:
         if TRUNCATE_BEFORE_UPLOAD:
             with engine.begin() as conn:
                 conn.execute(text(f"TRUNCATE TABLE {DB_TABLE}"))
-            print(f"Truncated table: {DB_TABLE}")
+            logger.info("Truncated table: %s", DB_TABLE)
 
         df.to_sql(DB_TABLE, engine, if_exists='append', index=False)
-        print(f"Done: {len(df)} row(s) uploaded to {DB_TABLE}")
+        logger.info("Done: %d row(s) uploaded to %s", len(df), DB_TABLE)
     finally:
         engine.dispose()
 
@@ -443,9 +485,9 @@ async def run(playwright: Playwright) -> None:
         playwright, PRACTICES, semaphore
     )
 
-    print("\n--- Summary ---")
-    print(f"Succeeded ({len(succeeded)}): {succeeded}")
-    print(f"Gave up ({len(gave_up)}): {gave_up}")
+    logger.info("--- Summary ---")
+    logger.info("Succeeded (%d): %s", len(succeeded), succeeded)
+    logger.info("Gave up (%d): %s", len(gave_up), gave_up)
 
     # --- Clean, enrich, and upload every practice's downloaded report ---
     cleaned_df = load_and_clean_reports(practice_files)
@@ -453,8 +495,14 @@ async def run(playwright: Playwright) -> None:
 
 
 async def main() -> None:
-    async with async_playwright() as playwright:
-        await run(playwright)
+    try:
+        async with async_playwright() as playwright:
+            await run(playwright)
+    except Exception:
+        logger.critical("Run failed with an unhandled exception", exc_info=True)
+        raise
+    else:
+        logger.info("Run completed successfully.")
 
 
 if __name__ == "__main__":

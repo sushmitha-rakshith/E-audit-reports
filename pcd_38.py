@@ -53,7 +53,8 @@ RECIPIENT_EMAILS = [
     "chirag_kr@exdionhealth.com",
     "hanudeepkumar_b@exdionhealth.com",
     "zeeshan_m@exdionhealth.com",
-    "shivaraj_l@exdionhealth.com"
+    "shivaraj_l@exdionhealth.com",
+    "tatavarti_omkar@exdionhealth.com"
 ]
 
 # Report date range (adjust as needed, or pull from env/args too)
